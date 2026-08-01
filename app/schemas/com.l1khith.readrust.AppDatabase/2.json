@@ -1,0 +1,66 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "8ab46927eaa7e7385b9f31d8420b20cf",
+    "entities": [
+      {
+        "tableName": "books",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uriString` TEXT NOT NULL, `title` TEXT NOT NULL, `currentPage` INTEGER NOT NULL, `totalPages` INTEGER NOT NULL, `lastReadTimestamp` INTEGER NOT NULL, PRIMARY KEY(`uriString`))",
+        "fields": [
+          {
+            "fieldPath": "uriString",
+            "columnName": "uriString",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentPage",
+            "columnName": "currentPage",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalPages",
+            "columnName": "totalPages",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastReadTimestamp",
+            "columnName": "lastReadTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uriString"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_books_lastReadTimestamp",
+            "unique": false,
+            "columnNames": [
+              "lastReadTimestamp"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_books_lastReadTimestamp` ON `${TABLE_NAME}` (`lastReadTimestamp`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8ab46927eaa7e7385b9f31d8420b20cf')"
+    ]
+  }
+}

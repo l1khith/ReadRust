@@ -1,0 +1,24 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/app/build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Rust
+/rust/target/
+**/*.rs.bk
+Cargo.lock
+
+# NDK / jniLibs (Optional: Ignore prebuilt PDFium so files if they are downloaded via script, but since they are manually copied, we might want to keep them. If you want to keep them in git, leave this commented out)
+# /app/src/main/jniLibs/

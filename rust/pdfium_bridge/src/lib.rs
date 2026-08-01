@@ -1,153 +1,147 @@
-#![allow(non_camel_case_types)]
+// UniFFI scaffolding
+uniffi::include_scaffolding!("pdfium_bridge");
 
 use std::ffi::{c_char, c_int, c_uint, c_void};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PDFium C API FFI Declarations
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// Pdfium C API FFI
+// ═══════════════════════════════════════════════════════════════════
 
 pub type FPDF_DOCUMENT = *mut c_void;
 pub type FPDF_PAGE = *mut c_void;
 pub type FPDF_TEXTPAGE = *mut c_void;
 pub type FPDF_BITMAP = *mut c_void;
 
-pub const FPDFBitmap_BGRA: c_int = 4;
-pub const FPDF_ANNOT: c_int = 0x01;
+const FPDFBitmap_BGRA: c_int = 4;
+const FPDF_ANNOT: c_int = 0x01;
 
 #[link(name = "pdfium")]
 extern "C" {
     fn FPDF_InitLibrary();
     fn FPDF_DestroyLibrary();
     fn FPDF_GetLastError() -> c_uint;
-
-    fn FPDF_LoadMemDocument64(
-        data_buf: *const c_void,
-        size: usize,
-        password: *const c_char,
-    ) -> FPDF_DOCUMENT;
-    fn FPDF_GetPageCount(document: FPDF_DOCUMENT) -> c_int;
-    fn FPDF_CloseDocument(document: FPDF_DOCUMENT);
-
-    fn FPDF_LoadPage(document: FPDF_DOCUMENT, page_index: c_int) -> FPDF_PAGE;
+    fn FPDF_LoadMemDocument64(data: *const c_void, size: usize, password: *const c_char) -> FPDF_DOCUMENT;
+    fn FPDF_GetPageCount(doc: FPDF_DOCUMENT) -> c_int;
+    fn FPDF_CloseDocument(doc: FPDF_DOCUMENT);
+    fn FPDF_LoadPage(doc: FPDF_DOCUMENT, page_index: c_int) -> FPDF_PAGE;
     fn FPDF_GetPageWidth(page: FPDF_PAGE) -> f64;
     fn FPDF_GetPageHeight(page: FPDF_PAGE) -> f64;
     fn FPDF_ClosePage(page: FPDF_PAGE);
-
-    fn FPDFBitmap_CreateEx(
-        width: c_int,
-        height: c_int,
-        format: c_int,
-        first_scan: *mut c_void,
-        stride: c_int,
-    ) -> FPDF_BITMAP;
-    fn FPDFBitmap_FillRect(
-        bitmap: FPDF_BITMAP,
-        left: c_int,
-        top: c_int,
-        width: c_int,
-        height: c_int,
-        color: c_uint,
-    );
+    fn FPDFBitmap_CreateEx(width: c_int, height: c_int, format: c_int, first_scan: *mut c_void, stride: c_int) -> FPDF_BITMAP;
+    fn FPDFBitmap_FillRect(bitmap: FPDF_BITMAP, left: c_int, top: c_int, width: c_int, height: c_int, color: c_uint);
     fn FPDFBitmap_Destroy(bitmap: FPDF_BITMAP);
-
-    fn FPDF_RenderPageBitmap(
-        bitmap: FPDF_BITMAP,
-        page: FPDF_PAGE,
-        start_x: c_int,
-        start_y: c_int,
-        size_x: c_int,
-        size_y: c_int,
-        rotate: c_int,
-        flags: c_int,
-    );
-
+    fn FPDF_RenderPageBitmap(bitmap: FPDF_BITMAP, page: FPDF_PAGE, start_x: c_int, start_y: c_int, size_x: c_int, size_y: c_int, rotate: c_int, flags: c_int);
     fn FPDFText_LoadPage(page: FPDF_PAGE) -> FPDF_TEXTPAGE;
     fn FPDFText_ClosePage(text_page: FPDF_TEXTPAGE);
     fn FPDFText_CountChars(text_page: FPDF_TEXTPAGE) -> c_int;
     fn FPDFText_GetUnicode(text_page: FPDF_TEXTPAGE, index: c_int) -> c_uint;
-    fn FPDFText_GetCharBox(
-        text_page: FPDF_TEXTPAGE,
-        index: c_int,
-        left: *mut f64,
-        right: *mut f64,
-        bottom: *mut f64,
-        top: *mut f64,
-    ) -> c_int;
+    fn FPDFText_GetCharBox(text_page: FPDF_TEXTPAGE, index: c_int, left: *mut f64, right: *mut f64, bottom: *mut f64, top: *mut f64) -> c_int;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Android Bitmap & Log FFI
-// ═══════════════════════════════════════════════════════════════════════════
-
-#[repr(C)]
-pub struct AndroidBitmapInfo {
-    pub width: u32,
-    pub height: u32,
-    pub stride: u32,
-    pub format: c_int,
-    pub flags: u32,
-}
-
-pub const ANDROID_BITMAP_RESULT_SUCCESS: c_int = 0;
-
-#[allow(dead_code)]
-pub const ANDROID_BITMAP_FORMAT_RGBA_8888: c_int = 1;
-
+// Android Bitmap JNI
 #[link(name = "jnigraphics")]
 extern "C" {
-    fn AndroidBitmap_getInfo(
-        env: *mut c_void,
-        bitmap: *mut c_void,
-        info: *mut AndroidBitmapInfo,
-    ) -> c_int;
-    fn AndroidBitmap_lockPixels(
-        env: *mut c_void,
-        bitmap: *mut c_void,
-        pixels: *mut *mut c_void,
-    ) -> c_int;
+    fn AndroidBitmap_getInfo(env: *mut c_void, bitmap: *mut c_void, info: *mut AndroidBitmapInfo) -> c_int;
+    fn AndroidBitmap_lockPixels(env: *mut c_void, bitmap: *mut c_void, pixels: *mut *mut c_void) -> c_int;
     fn AndroidBitmap_unlockPixels(env: *mut c_void, bitmap: *mut c_void) -> c_int;
 }
 
-#[link(name = "log")]
-extern "C" {
-    fn __android_log_write(prio: c_int, tag: *const c_char, text: *const c_char);
+#[repr(C)]
+struct AndroidBitmapInfo {
+    width: u32, height: u32, stride: u32, format: c_int, flags: u32,
 }
 
-const ANDROID_LOG_INFO: c_int = 4;
-const ANDROID_LOG_ERROR: c_int = 6;
+const ANDROID_BITMAP_RESULT_SUCCESS: c_int = 0;
+const ANDROID_BITMAP_FORMAT_RGBA_8888: c_int = 1;
+
+// Android log
+#[link(name = "log")]
+extern "C" { fn __android_log_write(prio: c_int, tag: *const c_char, text: *const c_char); }
 
 fn log_info(msg: &str) {
     let tag = b"PdfiumBridge\0";
-    let sanitized = msg.replace('\0', "?");
-    if let Ok(cmsg) = std::ffi::CString::new(sanitized) {
-        unsafe {
-            __android_log_write(
-                ANDROID_LOG_INFO,
-                tag.as_ptr() as *const c_char,
-                cmsg.as_ptr(),
-            );
-        }
-    }
+    let cmsg = std::ffi::CString::new(msg).unwrap_or_default();
+    unsafe { __android_log_write(4, tag.as_ptr() as *const c_char, cmsg.as_ptr()); }
 }
 
 fn log_error(msg: &str) {
     let tag = b"PdfiumBridge\0";
-    let sanitized = msg.replace('\0', "?");
-    if let Ok(cmsg) = std::ffi::CString::new(sanitized) {
-        unsafe {
-            __android_log_write(
-                ANDROID_LOG_ERROR,
-                tag.as_ptr() as *const c_char,
-                cmsg.as_ptr(),
-            );
-        }
+    let cmsg = std::ffi::CString::new(msg).unwrap_or_default();
+    unsafe { __android_log_write(6, tag.as_ptr() as *const c_char, cmsg.as_ptr()); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Error type
+// ═══════════════════════════════════════════════════════════════════
+
+#[derive(Debug, thiserror::Error)]
+pub enum PdfiumError {
+    #[error("Invalid file descriptor")] InvalidFd,
+    #[error("File is empty or fstat failed")] FileEmpty,
+    #[error("mmap failed")] MmapFailed,
+    #[error("FPDF_LoadMemDocument64 failed")] LoadFailed,
+    #[error("Out of memory")] Oom,
+    #[error("Invalid or stale document handle")] InvalidHandle,
+    #[error("Page index out of range")] PageOutOfRange,
+    #[error("Failed to load page")] PageLoadFailed,
+    #[error("Render failed")] RenderFailed,
+    #[error("Text extraction failed")] TextExtractionFailed,
+    #[error("Engine not initialized")] EngineNotInitialized,
+    #[error("Bitmap error")] BitmapError,
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Document handle
+// ═══════════════════════════════════════════════════════════════════
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct DocumentHandle(pub u64);
+
+impl UniffiCustomTypeConverter for DocumentHandle {
+    type Builtin = u64;
+    fn into_custom(val: Self::Builtin) -> uniffi::Result<Self> {
+        Ok(DocumentHandle(val))
+    }
+    fn from_custom(obj: Self) -> Self::Builtin {
+        obj.0
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Native State Management
-// ═══════════════════════════════════════════════════════════════════════════
+impl DocumentHandle {
+    fn as_ptr(&self) -> *mut PdfDocument { self.0 as *mut PdfDocument }
+    fn from_ptr(ptr: *mut PdfDocument) -> Self { DocumentHandle(ptr as u64) }
+}
+
+pub struct RenderConfig {
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32,
+    pub native_env: u64,
+    pub native_bitmap: u64,
+}
+
+pub struct PageRender {
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Engine state
+// ═══════════════════════════════════════════════════════════════════
+
+static ENGINE_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+fn ensure_initialized() -> Result<(), PdfiumError> {
+    if !ENGINE_INITIALIZED.load(Ordering::Acquire) {
+        return Err(PdfiumError::EngineNotInitialized);
+    }
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PdfDocument struct
+// ═══════════════════════════════════════════════════════════════════
 
 pub struct PdfDocument {
     magic: std::sync::atomic::AtomicU32,
@@ -155,420 +149,195 @@ pub struct PdfDocument {
     mapped_data: *mut c_void,
     mapped_size: usize,
     page_count: i32,
-    _fd: i32,
 }
 
-// SAFETY: PdfDocument is only accessed behind PDFIUM_ENGINE_LOCK or via atomic magic field.
+const MAGIC_ALIVE: u32 = 0x50444631;
+const MAGIC_DEAD: u32 = 0x00000000;
+
+impl PdfDocument {
+    fn is_alive(&self) -> bool { self.magic.load(Ordering::Acquire) == MAGIC_ALIVE }
+    fn poison(&self) { self.magic.store(MAGIC_DEAD, Ordering::Release); }
+}
+
 unsafe impl Send for PdfDocument {}
 unsafe impl Sync for PdfDocument {}
 
-const MAGIC_ALIVE: u32 = 0x50444631; // "PDF1"
-const MAGIC_DEAD: u32 = 0x00000000;
-
-static ENGINE_REF_COUNT: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-static PDFIUM_ENGINE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-fn resolve_doc(doc_ptr: i64, caller: &str) -> *const PdfDocument {
-    if doc_ptr == 0 {
-        log_error(&format!("{}: null doc_ptr", caller));
-        return std::ptr::null();
+fn resolve_doc(handle: DocumentHandle, caller: &str) -> Result<&'static PdfDocument, PdfiumError> {
+    if handle.0 == 0 {
+        log_error(&format!("{}: null handle", caller));
+        return Err(PdfiumError::InvalidHandle);
     }
-    let pdf_doc = doc_ptr as *const PdfDocument;
-    let is_alive =
-        unsafe { (*pdf_doc).magic.load(Ordering::Acquire) == MAGIC_ALIVE };
-    if !is_alive {
-        log_error(&format!("{}: stale or double-freed doc_ptr", caller));
-        return std::ptr::null();
+    let doc = unsafe { &*handle.as_ptr() };
+    if !doc.is_alive() {
+        log_error(&format!("{}: stale handle", caller));
+        return Err(PdfiumError::InvalidHandle);
     }
-    pdf_doc
+    Ok(doc)
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// JNI Entry Points — package: com.l1khith.readrust
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// UniFFI-exported functions
+// ═══════════════════════════════════════════════════════════════════
 
-#[no_mangle]
-pub extern "C" fn Java_com_l1khith_readrust_NativePdfEngine_initEngine(
-    _env: *mut c_void,
-    _obj: *mut c_void,
-) {
-    let _guard = PDFIUM_ENGINE_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let prev = ENGINE_REF_COUNT.fetch_add(1, Ordering::AcqRel);
-    if prev > 0 {
-        return;
-    }
-    unsafe {
-        FPDF_InitLibrary();
-    }
-    log_info("Pdfium library initialized (Rust)");
+pub fn init_engine() {
+    if ENGINE_INITIALIZED.swap(true, Ordering::AcqRel) { return; }
+    android_logger::init_once(android_logger::Config::default().with_max_level(log::LevelFilter::Debug));
+    unsafe { FPDF_InitLibrary(); }
+    log_info("Pdfium engine initialized (Rust/UniFFI)");
 }
 
-#[no_mangle]
-pub extern "C" fn Java_com_l1khith_readrust_NativePdfEngine_destroyEngine(
-    _env: *mut c_void,
-    _obj: *mut c_void,
-) {
-    let _guard = PDFIUM_ENGINE_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let prev = ENGINE_REF_COUNT.fetch_sub(1, Ordering::AcqRel);
-    if prev != 1 {
-        if prev == 0 {
-            ENGINE_REF_COUNT.store(0, Ordering::Release);
-            log_error("destroyEngine: engine was not initialized");
-        }
-        return;
-    }
-    unsafe {
-        FPDF_DestroyLibrary();
-    }
-    log_info("Pdfium library destroyed (Rust)");
+pub fn destroy_engine() {
+    if !ENGINE_INITIALIZED.swap(false, Ordering::AcqRel) { return; }
+    unsafe { FPDF_DestroyLibrary(); }
+    log_info("Pdfium engine destroyed (Rust/UniFFI)");
 }
 
-#[no_mangle]
-pub extern "C" fn Java_com_l1khith_readrust_NativePdfEngine_loadDocument(
-    _env: *mut c_void,
-    _obj: *mut c_void,
-    fd: i32,
-) -> i64 {
-    let _guard = PDFIUM_ENGINE_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    if fd < 0 {
-        log_error(&format!("loadDocument: invalid fd ({})", fd));
-        return 0;
-    }
-
-    // dup() the fd so we own our copy — the original is owned by
-    // Kotlin's ParcelFileDescriptor and will be closed on the Java side.
-    // Closing the original fd triggers Android's fdsan abort.
-    let owned_fd = unsafe { libc::dup(fd) };
-    if owned_fd < 0 {
-        log_error("loadDocument: dup(fd) failed");
-        return 0;
-    }
-
+pub fn load_document(fd: i32) -> Result<DocumentHandle, PdfiumError> {
+    ensure_initialized()?;
+    if fd < 0 { return Err(PdfiumError::InvalidFd); }
+    
     let mut st = unsafe { std::mem::zeroed::<libc::stat>() };
-    if unsafe { libc::fstat(owned_fd, &mut st) } != 0 || st.st_size <= 0 {
-        log_error("loadDocument: fstat failed or file is empty");
-        unsafe {
-            libc::close(owned_fd);
-        }
-        return 0;
+    if unsafe { libc::fstat(fd, &mut st) } != 0 || st.st_size <= 0 {
+        return Err(PdfiumError::FileEmpty);
     }
     let file_size = st.st_size as usize;
-
-    let data = unsafe {
-        libc::mmap(
-            std::ptr::null_mut(),
-            file_size,
-            libc::PROT_READ,
-            libc::MAP_PRIVATE,
-            owned_fd,
-            0,
-        )
-    };
-    if data == libc::MAP_FAILED {
-        log_error("loadDocument: mmap failed");
-        unsafe {
-            libc::close(owned_fd);
-        }
-        return 0;
-    }
-
-    unsafe {
-        libc::madvise(data, file_size, libc::MADV_RANDOM);
-        libc::close(owned_fd); // safe — we own this dup'd fd
-    }
-
-    let doc =
-        unsafe { FPDF_LoadMemDocument64(data, file_size, std::ptr::null()) };
+    
+    let data = unsafe { libc::mmap(std::ptr::null_mut(), file_size, libc::PROT_READ, libc::MAP_PRIVATE, fd, 0) };
+    if data == libc::MAP_FAILED { return Err(PdfiumError::MmapFailed); }
+    unsafe { libc::madvise(data, file_size, libc::MADV_RANDOM); }
+    
+    let doc = unsafe { FPDF_LoadMemDocument64(data, file_size, std::ptr::null()) };
     if doc.is_null() {
-        let err = unsafe { FPDF_GetLastError() };
-        log_error(&format!(
-            "loadDocument: FPDF_LoadMemDocument64 failed, error={}",
-            err
-        ));
-        unsafe {
-            libc::munmap(data, file_size);
-        }
-        return 0;
+        let _err = unsafe { FPDF_GetLastError() };
+        unsafe { libc::munmap(data, file_size); }
+        return Err(PdfiumError::LoadFailed);
     }
-
-    let pages = unsafe { FPDF_GetPageCount(doc) };
-
+    
+    let page_count = unsafe { FPDF_GetPageCount(doc) };
     let pdf_doc = Box::into_raw(Box::new(PdfDocument {
         magic: std::sync::atomic::AtomicU32::new(MAGIC_ALIVE),
-        doc,
-        mapped_data: data,
-        mapped_size: file_size,
-        page_count: pages,
-        _fd: -1,
+        doc, mapped_data: data, mapped_size: file_size, page_count,
     }));
-
-    log_info(&format!("loadDocument: success — {} pages", pages));
-    pdf_doc as i64
+    
+    log_info(&format!("Document loaded: {} pages", page_count));
+    Ok(DocumentHandle::from_ptr(pdf_doc))
 }
 
-#[no_mangle]
-pub extern "C" fn Java_com_l1khith_readrust_NativePdfEngine_getPageCount(
-    _env: *mut c_void,
-    _obj: *mut c_void,
-    doc_ptr: i64,
-) -> i32 {
-    let pdf_doc = resolve_doc(doc_ptr, "getPageCount");
-    if pdf_doc.is_null() {
-        return 0;
+pub fn close_document(handle: DocumentHandle) -> Result<(), PdfiumError> {
+    ensure_initialized()?;
+    let doc = resolve_doc(handle, "close_document")?;
+    doc.poison();
+    unsafe {
+        FPDF_CloseDocument(doc.doc);
+        libc::madvise(doc.mapped_data, doc.mapped_size, libc::MADV_DONTNEED);
+        libc::munmap(doc.mapped_data, doc.mapped_size);
+        drop(Box::from_raw(handle.as_ptr()));
     }
-    unsafe { (*pdf_doc).page_count }
+    log_info("Document closed");
+    Ok(())
 }
 
-#[no_mangle]
-pub extern "C" fn Java_com_l1khith_readrust_NativePdfEngine_renderPage(
-    env: *mut c_void,
-    _obj: *mut c_void,
-    doc_ptr: i64,
-    page_index: i32,
-    bitmap: *mut c_void,
-) -> u8 {
-    let _guard = PDFIUM_ENGINE_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let pdf_doc = resolve_doc(doc_ptr, "renderPage");
-    if pdf_doc.is_null() || bitmap.is_null() {
-        return 0;
-    }
+pub fn get_page_count(handle: DocumentHandle) -> Result<i32, PdfiumError> {
+    ensure_initialized()?;
+    let doc = resolve_doc(handle, "get_page_count")?;
+    Ok(doc.page_count)
+}
 
-    let page_count = unsafe { (*pdf_doc).page_count };
-    if page_index < 0 || page_index >= page_count {
-        return 0;
+pub fn render_page(handle: DocumentHandle, page_index: i32, config: RenderConfig) -> Result<PageRender, PdfiumError> {
+    ensure_initialized()?;
+    let doc = resolve_doc(handle, "render_page")?;
+    
+    if page_index < 0 || page_index >= doc.page_count {
+        return Err(PdfiumError::PageOutOfRange);
     }
-
-    let page = unsafe { FPDF_LoadPage((*pdf_doc).doc, page_index) };
-    if page.is_null() {
-        return 0;
+    
+    if config.width == 0 || config.height == 0 || config.stride < config.width * 4 {
+        return Err(PdfiumError::BitmapError);
     }
-
+    
+    let page = unsafe { FPDF_LoadPage(doc.doc, page_index) };
+    if page.is_null() { return Err(PdfiumError::PageLoadFailed); }
+    
     let page_w = unsafe { FPDF_GetPageWidth(page) };
     let page_h = unsafe { FPDF_GetPageHeight(page) };
+    
     if page_w <= 0.0 || page_h <= 0.0 {
-        unsafe {
-            FPDF_ClosePage(page);
-        }
-        return 0;
+        unsafe { FPDF_ClosePage(page); }
+        return Err(PdfiumError::RenderFailed);
     }
-
-    let mut info = unsafe { std::mem::zeroed::<AndroidBitmapInfo>() };
-    if unsafe { AndroidBitmap_getInfo(env, bitmap, &mut info) }
-        != ANDROID_BITMAP_RESULT_SUCCESS
-    {
-        unsafe {
-            FPDF_ClosePage(page);
-        }
-        return 0;
-    }
-
-    let mut pixels: *mut c_void = std::ptr::null_mut();
-    if unsafe { AndroidBitmap_lockPixels(env, bitmap, &mut pixels) }
-        != ANDROID_BITMAP_RESULT_SUCCESS
-    {
-        unsafe {
-            FPDF_ClosePage(page);
-        }
-        return 0;
-    }
-
-    let scale_x = info.width as f64 / page_w;
-    let scale_y = info.height as f64 / page_h;
+    
+    let scale_x = config.width as f64 / page_w;
+    let scale_y = config.height as f64 / page_h;
     let scale = scale_x.min(scale_y);
-
     let render_w = (page_w * scale) as i32;
     let render_h = (page_h * scale) as i32;
-    let offset_x = (info.width as i32 - render_w) / 2;
-    let offset_y = (info.height as i32 - render_h) / 2;
-
-    let fpdf_bitmap = unsafe {
-        FPDFBitmap_CreateEx(
-            info.width as i32,
-            info.height as i32,
-            FPDFBitmap_BGRA,
-            pixels,
-            info.stride as i32,
-        )
-    };
-
-    if !fpdf_bitmap.is_null() {
-        unsafe {
-            FPDFBitmap_FillRect(
-                fpdf_bitmap,
-                0,
-                0,
-                info.width as i32,
-                info.height as i32,
-                0xFFFFFFFF,
-            );
-            FPDF_RenderPageBitmap(
-                fpdf_bitmap,
-                page,
-                offset_x,
-                offset_y,
-                render_w,
-                render_h,
-                0,
-                FPDF_ANNOT,
-            );
-            FPDFBitmap_Destroy(fpdf_bitmap);
-        }
+    let offset_x = (config.width as i32 - render_w) / 2;
+    let offset_y = (config.height as i32 - render_h) / 2;
+    
+    let mut pixels: *mut c_void = std::ptr::null_mut();
+    let env = config.native_env as *mut c_void;
+    let bitmap = config.native_bitmap as *mut c_void;
+    
+    if unsafe { AndroidBitmap_lockPixels(env, bitmap, &mut pixels) } != ANDROID_BITMAP_RESULT_SUCCESS {
+        unsafe { FPDF_ClosePage(page); }
+        return Err(PdfiumError::BitmapError);
     }
-
+    
+    struct Guard { env: *mut c_void, bitmap: *mut c_void }
+    impl Drop for Guard {
+        fn drop(&mut self) { unsafe { AndroidBitmap_unlockPixels(self.env, self.bitmap); } }
+    }
+    let _guard = Guard { env, bitmap };
+    
+    let fpdf_bitmap = unsafe { FPDFBitmap_CreateEx(config.width as i32, config.height as i32, FPDFBitmap_BGRA, pixels, config.stride as i32) };
+    if fpdf_bitmap.is_null() {
+        unsafe { FPDF_ClosePage(page); }
+        return Err(PdfiumError::RenderFailed);
+    }
+    
     unsafe {
-        AndroidBitmap_unlockPixels(env, bitmap);
+        FPDFBitmap_FillRect(fpdf_bitmap, 0, 0, config.width as i32, config.height as i32, 0xFFFFFFFF);
+        FPDF_RenderPageBitmap(fpdf_bitmap, page, offset_x, offset_y, render_w, render_h, 0, FPDF_ANNOT);
+        FPDFBitmap_Destroy(fpdf_bitmap);
         FPDF_ClosePage(page);
     }
-
-    1
+    
+    Ok(PageRender { success: true, error: None })
 }
 
-#[no_mangle]
-pub extern "C" fn Java_com_l1khith_readrust_NativePdfEngine_extractText(
-    env: *mut c_void,
-    _obj: *mut c_void,
-    doc_ptr: i64,
-    page_index: i32,
-) -> *mut c_void {
-    let _guard = PDFIUM_ENGINE_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let pdf_doc = resolve_doc(doc_ptr, "extractText");
-    if pdf_doc.is_null() {
-        return new_jstring(env, "");
+pub fn extract_text(handle: DocumentHandle, page_index: i32) -> Result<String, PdfiumError> {
+    ensure_initialized()?;
+    let doc = resolve_doc(handle, "extract_text")?;
+    
+    if page_index < 0 || page_index >= doc.page_count {
+        return Err(PdfiumError::PageOutOfRange);
     }
-
-    let page_count = unsafe { (*pdf_doc).page_count };
-    if page_index < 0 || page_index >= page_count {
-        return new_jstring(env, "");
-    }
-
-    let page = unsafe { FPDF_LoadPage((*pdf_doc).doc, page_index) };
-    if page.is_null() {
-        return new_jstring(env, "");
-    }
-
+    
+    let page = unsafe { FPDF_LoadPage(doc.doc, page_index) };
+    if page.is_null() { return Err(PdfiumError::PageLoadFailed); }
+    
     let text_page = unsafe { FPDFText_LoadPage(page) };
     if text_page.is_null() {
-        unsafe {
-            FPDF_ClosePage(page);
-        }
-        return new_jstring(env, "");
+        unsafe { FPDF_ClosePage(page); }
+        return Err(PdfiumError::TextExtractionFailed);
     }
-
+    
     let page_height = unsafe { FPDF_GetPageHeight(page) };
     let bottom_exclusion = page_height * 0.08;
     let top_exclusion = page_height * 0.92;
-
     let char_count = unsafe { FPDFText_CountChars(text_page) };
-    let mut utf16_units: Vec<u16> = Vec::with_capacity(char_count as usize);
-
+    let mut text = String::with_capacity(char_count as usize);
+    
     for i in 0..char_count {
-        let mut left = 0.0f64;
-        let mut right = 0.0f64;
-        let mut bottom = 0.0f64;
-        let mut top = 0.0f64;
-
-        let has_box = unsafe {
-            FPDFText_GetCharBox(
-                text_page,
-                i,
-                &mut left,
-                &mut right,
-                &mut bottom,
-                &mut top,
-            ) != 0
-        };
-
-        // Skip characters in header/footer exclusion zones
-        if has_box && (top >= top_exclusion || bottom <= bottom_exclusion) {
-            continue;
-        }
-
+        let mut left = 0.0f64; let mut right = 0.0f64; let mut bottom = 0.0f64; let mut top = 0.0f64;
+        let has_box = unsafe { FPDFText_GetCharBox(text_page, i, &mut left, &mut right, &mut bottom, &mut top) != 0 };
+        if has_box && (top >= top_exclusion || bottom <= bottom_exclusion) { continue; }
+        
         let code = unsafe { FPDFText_GetUnicode(text_page, i) };
-        if code != 0 {
-            if let Some(ch) = char::from_u32(code) {
-                let mut buf = [0u16; 2];
-                let encoded = ch.encode_utf16(&mut buf);
-                for unit in encoded.iter() {
-                    utf16_units.push(*unit);
-                }
-            }
-        }
+        if code == 0 || code > 0x10FFFF { continue; }
+        if let Some(c) = std::char::from_u32(code) { text.push(c); }
     }
-
-    unsafe {
-        FPDFText_ClosePage(text_page);
-        FPDF_ClosePage(page);
-    }
-
-    let text = String::from_utf16_lossy(&utf16_units);
-    new_jstring(env, &text)
-}
-
-#[no_mangle]
-pub extern "C" fn Java_com_l1khith_readrust_NativePdfEngine_closeDocument(
-    _env: *mut c_void,
-    _obj: *mut c_void,
-    doc_ptr: i64,
-) {
-    let _guard = PDFIUM_ENGINE_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let pdf_doc = resolve_doc(doc_ptr, "closeDocument");
-    if pdf_doc.is_null() {
-        return;
-    }
-
-    let doc_handle = unsafe { (*pdf_doc).doc };
-    let mapped_data = unsafe { (*pdf_doc).mapped_data };
-    let mapped_size = unsafe { (*pdf_doc).mapped_size };
-
-    unsafe { (*pdf_doc).magic.store(MAGIC_DEAD, Ordering::Release) };
-
-    unsafe {
-        FPDF_CloseDocument(doc_handle);
-        libc::madvise(mapped_data, mapped_size, libc::MADV_DONTNEED);
-        libc::munmap(mapped_data, mapped_size);
-        drop(Box::from_raw(doc_ptr as *mut PdfDocument));
-    }
-
-    log_info("closeDocument: released");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// JNI String Helper
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// Creates a Java String (jstring) from a Rust &str via the JNI NewString function.
-/// The JNIEnv vtable index for NewString is 163.
-fn new_jstring(env: *mut c_void, text: &str) -> *mut c_void {
-    unsafe {
-        let env_ptr = env as *mut *mut *const c_void;
-        if env_ptr.is_null() || (*env_ptr).is_null() {
-            return std::ptr::null_mut();
-        }
-        let vtable = **env_ptr;
-        let fn_ptr = *(vtable as *const *const c_void).add(163);
-        if fn_ptr.is_null() {
-            return std::ptr::null_mut();
-        }
-        let new_string_fn: extern "C" fn(
-            *mut c_void,
-            *const u16,
-            i32,
-        ) -> *mut c_void = std::mem::transmute(fn_ptr);
-
-        let utf16: Vec<u16> = text.encode_utf16().collect();
-        new_string_fn(env, utf16.as_ptr(), utf16.len() as i32)
-    }
+    
+    unsafe { FPDFText_ClosePage(text_page); FPDF_ClosePage(page); }
+    Ok(text)
 }

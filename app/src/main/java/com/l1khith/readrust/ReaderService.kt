@@ -374,6 +374,7 @@ class ReaderService : Service(), TextToSpeech.OnInitListener {
         } catch (e: Exception) {
             Log.w(TAG, "Error shutting down old TTS", e)
         }
+        tts = null
         tts = TextToSpeech(this, this)
     }
 
@@ -398,7 +399,7 @@ class ReaderService : Service(), TextToSpeech.OnInitListener {
     private fun refreshWakeLock() {
         try {
             if (wakeLock?.isHeld == true) wakeLock?.release()
-            wakeLock?.acquire(10 * 60 * 1000L)
+            wakeLock?.acquire(2 * 60 * 1000L)
         } catch (e: Exception) {
             Log.w(TAG, "WakeLock refresh failed", e)
         }

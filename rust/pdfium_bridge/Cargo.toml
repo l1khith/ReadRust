@@ -5,8 +5,20 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
-name = "pdfium_bridge"
 
 [dependencies]
-libc = "0.2"
+uniffi = { version = "0.28", features = ["build", "cli"] }
 log = "0.4"
+android_logger = "0.15"
+thiserror = "1.0"
+libc = "0.2"
+
+[build-dependencies]
+uniffi = { version = "0.28", features = ["build"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"

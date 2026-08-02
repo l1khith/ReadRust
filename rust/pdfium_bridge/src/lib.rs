@@ -1,5 +1,5 @@
 use jni::objects::JString;
-use jni::sys::{jint, jlong, jobject, jstring, JNIEnv};
+use jni::sys::{jfloat, jint, jlong, jobject, jstring, JNIEnv};
 use jni::JNIEnv as JNIEnvStruct;
 use std::collections::HashMap;
 use std::ffi::{c_char, c_int, c_void, CString};
@@ -235,6 +235,10 @@ fn render_page_inner(
     bitmap_obj: jobject,
     width: jint,
     height: jint,
+    hl_left: f32,
+    hl_top: f32,
+    hl_right: f32,
+    hl_bottom: f32,
 ) -> jint {
     if handle <= 0 || bitmap_obj.is_null() {
         return -2;
@@ -333,6 +337,37 @@ fn render_page_inner(
         for chunk in slice.chunks_exact_mut(4) {
             chunk.swap(0, 2);
             chunk[3] = 255;
+        }
+
+        // ── Native Rust Translucent Blue Highlight Blending ──
+        if hl_right > hl_left && hl_bottom > hl_top && size_x > 0 && size_y > 0 {
+            let h_x0 = (start_x + (hl_left * size_x as f32) as c_int).clamp(0, width - 1);
+            let h_y0 = (start_y + (hl_top * size_y as f32) as c_int).clamp(0, height - 1);
+            let h_x1 = (start_x + (hl_right * size_x as f32) as c_int).clamp(h_x0 + 1, width);
+            let h_y1 = (start_y + (hl_bottom * size_y as f32) as c_int).clamp(h_y0 + 1, height);
+
+            let stride = info.stride as usize;
+            let hl_r = 0u32;
+            let hl_g = 122u32;
+            let hl_b = 255u32;
+            let alpha = 0.35f32;
+            let inv_alpha = 1.0f32 - alpha;
+
+            for y in h_y0..h_y1 {
+                let row_start = (y as usize) * stride;
+                for x in h_x0..h_x1 {
+                    let px_idx = row_start + (x as usize) * 4;
+                    if px_idx + 3 < slice.len() {
+                        let r = slice[px_idx] as f32;
+                        let g = slice[px_idx + 1] as f32;
+                        let b = slice[px_idx + 2] as f32;
+
+                        slice[px_idx] = (r * inv_alpha + hl_r as f32 * alpha) as u8;
+                        slice[px_idx + 1] = (g * inv_alpha + hl_g as f32 * alpha) as u8;
+                        slice[px_idx + 2] = (b * inv_alpha + hl_b as f32 * alpha) as u8;
+                    }
+                }
+            }
         }
     }
 
@@ -704,9 +739,16 @@ pub unsafe extern "system" fn Java_com_l1khith_readrust_PdfiumBridge_nativeRende
     bitmap: jobject,
     width: jint,
     height: jint,
+    hl_left: jfloat,
+    hl_top: jfloat,
+    hl_right: jfloat,
+    hl_bottom: jfloat,
 ) -> jint {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        render_page_inner(&mut env, handle, page_index, bitmap, width, height)
+        render_page_inner(
+            &mut env, handle, page_index, bitmap, width, height,
+            hl_left, hl_top, hl_right, hl_bottom,
+        )
     }))
     .unwrap_or(-99)
 }
@@ -722,7 +764,10 @@ pub unsafe extern "system" fn Java_com_l1khith_readrust_PdfiumBridge_nativeRende
     height: jint,
 ) -> jint {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        render_page_inner(&mut env, handle, page_index, bitmap, width, height)
+        render_page_inner(
+            &mut env, handle, page_index, bitmap, width, height,
+            -1.0, -1.0, -1.0, -1.0,
+        )
     }))
     .unwrap_or(-99)
 }

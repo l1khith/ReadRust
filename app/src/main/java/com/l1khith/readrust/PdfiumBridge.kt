@@ -27,7 +27,11 @@ object PdfiumBridge {
         pageIndex: Int,
         bitmap: Bitmap,
         width: Int,
-        height: Int
+        height: Int,
+        hlLeft: Float = -1f,
+        hlTop: Float = -1f,
+        hlRight: Float = -1f,
+        hlBottom: Float = -1f
     ): Int
 
     @JvmStatic external fun nativeRenderThumbnail(

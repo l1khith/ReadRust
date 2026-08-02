@@ -1,5 +1,7 @@
 package com.l1khith.readrust
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -12,9 +14,11 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -257,8 +261,7 @@ fun ReaderScreen(
             .debounce(500)
             .collect { page ->
                 BookStore.saveBookProgress(
-                    context, uri, page, totalPages, cachedFileName,
-                    scope = this
+                    context, uri, page, totalPages, cachedFileName
                 )
             }
     }
@@ -343,14 +346,18 @@ fun ReaderScreen(
                     modifier = Modifier.fillMaxWidth().fillMaxHeight(0.75f),
                     beyondViewportPageCount = 1
                 ) { pageIndex ->
-                    val pageRender by produceState<PageRender?>(initialValue = null, pageIndex, documentReady) {
+                    val activeSentence = if (isPlaying && pageIndex == currentPage && currentSentenceIndex in sentencesWithBounds.indices) {
+                        sentencesWithBounds[currentSentenceIndex]
+                    } else null
+
+                    val pageRender by produceState<PageRender?>(initialValue = null, pageIndex, documentReady, activeSentence) {
                         if (!documentReady) {
                             value = null
                             return@produceState
                         }
                         ensureActive()
                         val result = withContext(Dispatchers.IO) {
-                            PdfHelper.renderPageToBitmap(pageIndex)
+                            PdfHelper.renderPageToBitmap(pageIndex, activeSentence)
                         }
                         value = if (result is PdfResult.Success) result.value else null
                     }
@@ -361,38 +368,12 @@ fun ReaderScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         if (pageRender != null) {
-                            Box(
+                            Image(
+                                bitmap = pageRender!!.bitmap.asImageBitmap(),
+                                contentDescription = "Page ${pageIndex + 1}",
                                 modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    bitmap = pageRender!!.bitmap.asImageBitmap(),
-                                    contentDescription = "Page ${pageIndex + 1}",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Fit
-                                )
-
-                                // Highlight active reading sentence on top of PDF page in Visual mode ONLY when playing!
-                                if (isPlaying && pageIndex == currentPage && currentSentenceIndex in sentencesWithBounds.indices) {
-                                    val active = sentencesWithBounds[currentSentenceIndex]
-                                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                                        val leftPx = active.left * size.width
-                                        val topPx = active.top * size.height
-                                        val rightPx = active.right * size.width
-                                        val bottomPx = active.bottom * size.height
-
-                                        val rectW = (rightPx - leftPx).coerceAtLeast(12f)
-                                        val rectH = (bottomPx - topPx).coerceAtLeast(12f)
-
-                                        drawRoundRect(
-                                            color = Color(0x55007AFF), // Translucent Accent Blue highlight
-                                            topLeft = androidx.compose.ui.geometry.Offset(leftPx, topPx),
-                                            size = androidx.compose.ui.geometry.Size(rectW, rectH),
-                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
-                                        )
-                                    }
-                                }
-                            }
+                                contentScale = ContentScale.Fit
+                            )
                         } else {
                             CircularProgressIndicator(color = AccentColor)
                         }
@@ -419,10 +400,11 @@ fun ReaderScreen(
                         state = textListState,
                         modifier = Modifier.fillMaxWidth().fillMaxHeight(0.75f).padding(horizontal = 16.dp)
                     ) {
+                        @OptIn(ExperimentalFoundationApi::class)
                         itemsIndexed(sentences, key = { index, _ -> "sentence_$index" }) { index, sentence ->
                             val isActive = index == currentSentenceIndex
-                            val itemColor = if (isActive) AccentColor else TextWhite
-                            val bgColor = if (isActive) SurfaceDark else Color.Transparent
+                            val itemColor = if (isActive) Color.White else TextWhite
+                            val bgColor = if (isActive) Color(0xFF0066FF).copy(alpha = 0.35f) else Color.Transparent
                             val weight = if (isActive) FontWeight.Bold else FontWeight.Normal
 
                             Text(
@@ -434,8 +416,16 @@ fun ReaderScreen(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(bgColor)
-                                    .clickable { readerService?.playSentence(index) }
-                                    .padding(12.dp)
+                                    .combinedClickable(
+                                        onClick = { readerService?.playSentence(index) },
+                                        onLongClick = {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            val clip = ClipData.newPlainText("PDF Text", sentence)
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(context, "Copied text to clipboard", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                    .padding(horizontal = 14.dp, vertical = 10.dp)
                             )
                         }
                     }

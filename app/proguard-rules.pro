@@ -1,15 +1,17 @@
 # R8 / ProGuard rules for ReadRust production release
 
-# Keep JNI native methods
+# Keep all ReadRust package classes, fields, methods, and JNI entrypoints
+-keep class com.l1khith.readrust.** { *; }
+-keepclassmembers class com.l1khith.readrust.** { *; }
+
+# Keep native JNI methods
 -keepclasseswithmembernames class * {
     native <methods>;
 }
 
-# Keep PdfiumBridge and model classes accessed via JNI / Reflection / Gson
--keep class com.l1khith.readrust.PdfiumBridge { *; }
--keep class com.l1khith.readrust.PdfHelper { *; }
--keep class com.l1khith.readrust.SentenceWithBounds { *; }
--keepclassmembers class com.l1khith.readrust.SentenceWithBounds { *; }
+# Keep Gson library and reflection classes
+-keep class com.google.gson.** { *; }
+-keepclassmembers class com.google.gson.** { *; }
 
 # Keep Gson annotations and serialized attributes
 -keepattributes Signature, *Annotation*, EnclosingMethod, InnerClasses
@@ -17,7 +19,7 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
-# Keep Compose annotations
+# Keep Compose runtime annotations
 -keepclassmembers class * {
     @androidx.compose.runtime.Composable <methods>;
 }

@@ -10,5 +10,6 @@ fn main() {
     let manifest = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let jni_libs = manifest.join("../../app/src/main/jniLibs").join(abi);
     println!("cargo:rustc-link-search=native={}", jni_libs.display());
-    uniffi::generate_scaffolding("src/pdfium_bridge.udl").unwrap();
+    println!("cargo:rustc-link-lib=dylib=pdfium");
+    println!("cargo:rustc-link-lib=dylib=jnigraphics");
 }

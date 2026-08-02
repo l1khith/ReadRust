@@ -22,9 +22,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize the Rust PDFium bridge engine
-        NativePdfEngine.initEngineOnce()
-        Log.i("MainActivity", "PDFium bridge engine initialized")
+        Log.i("MainActivity", "ReadRust app started")
 
         setContent {
             ReadRustTheme {

@@ -72,15 +72,11 @@ dependencies {
     implementation(libs.androidx.media)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    
-    // UniFFI JNA Requirement
-    implementation("net.java.dev.jna:jna:5.15.0@aar")
 
     // Room Database
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
-
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -88,21 +84,4 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    
-    // JNA for UniFFI
-    implementation("net.java.dev.jna:jna:5.15.0@aar")
-}
-
-tasks.register<Exec>("generateUniFFIBindings") {
-    workingDir = rootProject.file("rust/pdfium_bridge")
-    commandLine(
-        "cargo", "run", "--bin", "uniffi-bindgen", "generate", 
-        "src/pdfium_bridge.udl",
-        "--language", "kotlin",
-        "--out-dir", "../../app/src/main/java/"
-    )
-}
-
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    dependsOn("generateUniFFIBindings")
 }

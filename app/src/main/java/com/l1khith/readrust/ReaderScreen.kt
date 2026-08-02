@@ -186,6 +186,7 @@ fun ReaderScreen(
 
     var currentPage by rememberSaveable { mutableIntStateOf(0) }
     var sentences by remember { mutableStateOf<List<String>>(emptyList()) }
+    var sentencesWithBounds by remember { mutableStateOf<List<SentenceWithBounds>>(emptyList()) }
     var totalPages by remember { mutableIntStateOf(1) }
     var isVisualMode by remember { mutableStateOf(true) }
     var documentReady by remember { mutableStateOf(false) }
@@ -269,13 +270,15 @@ fun ReaderScreen(
             .distinctUntilChanged()
             .collectLatest { page ->
                 withContext(Dispatchers.IO) {
-                    val result = PdfHelper.extractTextFromPage(page)
-                    val extracted = when (result) {
+                    val result = PdfHelper.extractSentencesWithBoundsFromPage(page)
+                    val items = when (result) {
                         is PdfResult.Success -> result.value
                         is PdfResult.Error   -> emptyList()
                         is PdfResult.NotReady -> emptyList()
                     }
+                    val extracted = items.map { it.text }
                     withContext(Dispatchers.Main) {
+                        sentencesWithBounds = items
                         sentences = extracted
                         readerService?.setSentences(extracted)
                     }
@@ -358,12 +361,38 @@ fun ReaderScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         if (pageRender != null) {
-                            Image(
-                                bitmap = pageRender!!.bitmap.asImageBitmap(),
-                                contentDescription = "Page ${pageIndex + 1}",
+                            Box(
                                 modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit
-                            )
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    bitmap = pageRender!!.bitmap.asImageBitmap(),
+                                    contentDescription = "Page ${pageIndex + 1}",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit
+                                )
+
+                                // Highlight active reading sentence on top of PDF page in Visual mode ONLY when playing!
+                                if (isPlaying && pageIndex == currentPage && currentSentenceIndex in sentencesWithBounds.indices) {
+                                    val active = sentencesWithBounds[currentSentenceIndex]
+                                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                                        val leftPx = active.left * size.width
+                                        val topPx = active.top * size.height
+                                        val rightPx = active.right * size.width
+                                        val bottomPx = active.bottom * size.height
+
+                                        val rectW = (rightPx - leftPx).coerceAtLeast(12f)
+                                        val rectH = (bottomPx - topPx).coerceAtLeast(12f)
+
+                                        drawRoundRect(
+                                            color = Color(0x55007AFF), // Translucent Accent Blue highlight
+                                            topLeft = androidx.compose.ui.geometry.Offset(leftPx, topPx),
+                                            size = androidx.compose.ui.geometry.Size(rectW, rectH),
+                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                                        )
+                                    }
+                                }
+                            }
                         } else {
                             CircularProgressIndicator(color = AccentColor)
                         }

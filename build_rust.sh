@@ -1,15 +1,9 @@
 #!/bin/bash
 set -e
 
-# Install targets
+# Install targets & cargo-ndk
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android 2>/dev/null || true
-cargo install uniffi-bindgen cargo-ndk 2>/dev/null || true
-
-# Generate Kotlin bindings
-cd rust/pdfium_bridge
-# Run via cargo because the binary isn't installed standalone
-cargo run --bin uniffi-bindgen generate src/pdfium_bridge.udl --language kotlin --out-dir ../../app/src/main/java/
-cd ../..
+cargo install cargo-ndk 2>/dev/null || true
 
 # Build Rust for all ABIs
 cd rust/pdfium_bridge

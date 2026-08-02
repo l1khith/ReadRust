@@ -174,6 +174,44 @@ class ReaderService : Service(), TextToSpeech.OnInitListener {
             .replace(Regex("[\\[\\](){}<>]"), "")
             .replace(Regex("[*_~`#]"), "")
             .replace(Regex("\\n+"), " ")
+            .replace(Regex("(?i)\\bDr\\."), "Doctor")
+            .replace(Regex("(?i)\\bMr\\."), "Mister")
+            .replace(Regex("(?i)\\bMrs\\."), "Misses")
+            .replace(Regex("(?i)\\bMs\\."), "Miss")
+            .replace(Regex("(?i)\\bProf\\."), "Professor")
+            .replace(Regex("(?i)\\bvs\\."), "versus")
+            .replace(Regex("(?i)\\betc\\."), "et cetera")
+            .replace(Regex("(?i)\\be\\.g\\."), "for example")
+            .replace(Regex("(?i)\\bi\\.e\\."), "that is")
+            .replace(Regex("(?i)\\bCh\\."), "Chapter")
+            .replace(Regex("(?i)\\bPg\\."), "Page")
+            .replace(Regex("(?i)\\bFig\\."), "Figure")
+            .replace(Regex("(?i)\\bNo\\."), "Number")
+            .replace(Regex("…"), "...")
+            .replace(Regex("—"), ", ")
+            .replace(Regex("–"), "-")
+    }
+
+    private fun splitLongSentences(sentences: List<String>, maxLength: Int = 150): List<String> {
+        return sentences.flatMap { sentence ->
+            if (sentence.length <= maxLength) {
+                listOf(sentence)
+            } else {
+                val parts = mutableListOf<String>()
+                var remaining = sentence
+                while (remaining.length > maxLength) {
+                    val splitPoint = remaining.lastIndexOfAny(charArrayOf(',', ';', ':'), maxLength)
+                        .takeIf { it > maxLength / 2 }
+                        ?: remaining.lastIndexOf(' ', maxLength)
+                            .takeIf { it > 0 }
+                        ?: maxLength
+                    parts.add(remaining.substring(0, splitPoint).trim())
+                    remaining = remaining.substring(splitPoint).trimStart(',', ';', ':', ' ')
+                }
+                if (remaining.isNotBlank()) parts.add(remaining)
+                parts
+            }
+        }
     }
 
     fun setSentences(newSentences: List<String>) {
@@ -181,7 +219,7 @@ class ReaderService : Service(), TextToSpeech.OnInitListener {
             tts?.stop()
         }
 
-        sentences = newSentences
+        sentences = newSentences.map { cleanTextForTts(it) }
         currentSentenceIndex = 0
         _currentSentenceIndexFlow.value = 0
 
@@ -242,7 +280,9 @@ class ReaderService : Service(), TextToSpeech.OnInitListener {
         _isPlayingFlow.value = true
         mediaSession.isActive = true
 
-        refreshWakeLock()
+        if (wakeLock?.isHeld == false) {
+            wakeLock?.acquire(60 * 60 * 1000L) // 1 hour — long ebook session
+        }
 
         updateMediaState(PlaybackStateCompat.STATE_PLAYING)
         updateForegroundNotification()
@@ -397,12 +437,7 @@ class ReaderService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun refreshWakeLock() {
-        try {
-            if (wakeLock?.isHeld == true) wakeLock?.release()
-            wakeLock?.acquire(2 * 60 * 1000L)
-        } catch (e: Exception) {
-            Log.w(TAG, "WakeLock refresh failed", e)
-        }
+        // No-op: wakeLock is held continuously during playback for 1 hour
     }
 
     companion object {

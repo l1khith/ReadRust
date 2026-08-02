@@ -4,8 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
@@ -18,7 +19,7 @@ object ThumbnailCache {
     private const val THUMBNAIL_DIR = "pdf_thumbnails"
     private const val THUMBNAIL_WIDTH = 200
     private const val THUMBNAIL_HEIGHT = 280
-    private const val JPEG_QUALITY = 80
+    private const val JPEG_QUALITY = 85
     private const val MAX_CACHE_BYTES = 50L * 1024L * 1024L
 
     private fun cacheDir(context: Context): File {
@@ -49,11 +50,25 @@ object ThumbnailCache {
         }
     }
 
+    fun clearAll(context: Context) {
+        try {
+            val dir = cacheDir(context)
+            dir.listFiles()?.forEach { it.delete() }
+        } catch (e: Exception) {
+            Log.w("ThumbnailCache", "Failed to clear thumbnail cache", e)
+        }
+    }
+
     suspend fun get(context: Context, uriString: String): Bitmap? {
         return withContext(Dispatchers.IO) {
             val file = fileFor(context, uriString)
             if (file.exists()) {
-                BitmapFactory.decodeFile(file.absolutePath)
+                try {
+                    BitmapFactory.decodeFile(file.absolutePath)
+                } catch (e: Exception) {
+                    file.delete()
+                    null
+                }
             } else {
                 null
             }
@@ -69,29 +84,58 @@ object ThumbnailCache {
             try {
                 evictIfNeeded(context)
 
-                val pfd = context.contentResolver.openFileDescriptor(uri, "r")
-                    ?: return@withContext null
+                var handle = 0L
+                var tempFile: File? = null
+                var pfd: ParcelFileDescriptor? = null
+
+                // 1. Try opening direct ParcelFileDescriptor
+                try {
+                    pfd = context.contentResolver.openFileDescriptor(uri, "r")
+                    if (pfd != null) {
+                        handle = PdfiumBridge.nativeLoadDocument(pfd.fd)
+                    }
+                } catch (e: Exception) {
+                    Log.w("ThumbnailCache", "Direct PFD load failed for $uri, trying temp file fallback", e)
+                }
+
+                // 2. Fallback: Copy URI content to local temp file if direct PFD failed
+                if (handle <= 0L) {
+                    pfd?.close()
+                    pfd = null
+
+                    val temp = File.createTempFile("thumb_tmp_", ".pdf", context.cacheDir)
+                    tempFile = temp
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        temp.outputStream().use { output -> input.copyTo(output) }
+                    }
+
+                    pfd = ParcelFileDescriptor.open(temp, ParcelFileDescriptor.MODE_READ_ONLY)
+                    if (pfd != null) {
+                        handle = PdfiumBridge.nativeLoadDocument(pfd.fd)
+                    }
+                }
+
+                if (handle <= 0L) {
+                    pfd?.close()
+                    tempFile?.delete()
+                    Log.e("ThumbnailCache", "Failed to load document for thumbnail generation: $uri")
+                    return@withContext null
+                }
 
                 val bitmap = Bitmap.createBitmap(
                     THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, Bitmap.Config.ARGB_8888
                 )
 
-                val success = PdfiumLock.mutex.withLock {
-                    val docPtr = NativePdfEngine.loadDocument(pfd.fd)
-                    if (docPtr == 0L) {
-                        pfd.close()
-                        return@withLock false
-                    }
+                val res = PdfiumBridge.nativeRenderThumbnail(
+                    handle, 0, bitmap, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT
+                )
 
-                    val rendered = NativePdfEngine.renderPage(docPtr, 0, bitmap)
+                PdfiumBridge.nativeCloseDocument(handle)
+                pfd?.close()
+                tempFile?.delete()
 
-                    NativePdfEngine.closeDocument(docPtr)
-                    pfd.close()
-
-                    rendered
-                }
-
-                if (!success) {
+                if (res != 0) {
+                    Log.e("ThumbnailCache", "Native render thumbnail failed with error code $res for $uri")
                     return@withContext null
                 }
 
@@ -102,6 +146,7 @@ object ThumbnailCache {
 
                 bitmap
             } catch (e: Exception) {
+                Log.e("ThumbnailCache", "Thumbnail generation crashed for $uri", e)
                 null
             }
         }

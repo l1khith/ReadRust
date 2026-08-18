@@ -44,6 +44,8 @@ object PdfHelper {
     // 3-bucket reusable Bitmaps for zero-allocation page rendering
     private val buckets = Array<Bitmap?>(3) { null }
 
+    fun getDocHandle(): Long = docHandle
+
     private fun getOrCreateBucket(index: Int): Bitmap {
         val slot = Math.floorMod(index, 3)
         var bmp = buckets[slot]

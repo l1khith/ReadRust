@@ -8,8 +8,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -23,6 +29,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         Log.i("MainActivity", "ReadRust app started")
+        SettingsManager.init(this)
 
         setContent {
             ReadRustTheme {
@@ -59,21 +66,25 @@ fun AppNavigation() {
                 // 3. Save to BookStore immediately so Library sees it
                 BookStore.saveBookProgress(context, it, 0, 1, realName, scope)
 
-                // 4. Navigate (Uri.encode is required by Compose Navigation for content:// URIs with slashes)
+                // 4. Navigate with singleTop to prevent backstack duplicates
                 val encodedUri = Uri.encode(it.toString())
-                navController.navigate("reader/$encodedUri")
+                navController.navigate("reader/$encodedUri") {
+                    launchSingleTop = true
+                }
             }
         }
     )
 
-    NavHost(navController = navController, startDestination = "library") {
+    NavHost(navController = navController, startDestination = "main") {
 
-        // --- SCREEN 1: LIBRARY (HOME) ---
-        composable("library") {
-            LibraryScreen(
+        // --- MAIN CONTAINER SCREEN (LIBRARY, AUDIO, SETTINGS BOTTOM NAV) ---
+        composable("main") {
+            MainScreen(
                 onBookClick = { uri ->
                     val encodedUri = Uri.encode(uri.toString())
-                    navController.navigate("reader/$encodedUri")
+                    navController.navigate("reader/$encodedUri") {
+                        launchSingleTop = true
+                    }
                 },
                 onAddBookClick = {
                     pdfLauncher.launch(arrayOf("application/pdf"))
@@ -81,14 +92,14 @@ fun AppNavigation() {
             )
         }
 
-        // --- SCREEN 2: READER (PLAYER) ---
+        // --- READER (PLAYER) ---
         composable(
             route = "reader/{uriString}",
             arguments = listOf(navArgument("uriString") { type = NavType.StringType })
         ) { backStackEntry ->
             val uriString = backStackEntry.arguments?.getString("uriString")
 
-            if (uriString != null) {
+            if (!uriString.isNullOrBlank()) {
                 val uri = Uri.parse(uriString)
 
                 ReaderScreen(
@@ -97,10 +108,17 @@ fun AppNavigation() {
                         navController.popBackStack()
                     }
                 )
+            } else {
+                LaunchedEffect(Unit) {
+                    navController.popBackStack()
+                }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Invalid PDF URI")
+                }
             }
         }
 
-        // --- SCREEN 3: ABOUT ---
+        // --- ABOUT ---
         composable("about") {
             AboutScreen(
                 onBack = {

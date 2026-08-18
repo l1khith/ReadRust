@@ -18,8 +18,17 @@ data class BookEntity(
     val title: String,
     val currentPage: Int = 0,
     val totalPages: Int = 1,
-    val lastReadTimestamp: Long = System.currentTimeMillis()
+    val lastReadTimestamp: Long = System.currentTimeMillis(),
+    val bookmarkedPages: String = "" // Comma-separated list of 0-based page indices (e.g. "0,3,7")
 ) {
     /** Returns reading progress as a float from 0.0 to 1.0. */
     fun getProgress(): Float = if (totalPages > 0) currentPage.toFloat() / totalPages else 0f
+
+    /** Returns set of bookmarked 0-based page indices. */
+    fun getBookmarksSet(): Set<Int> {
+        if (bookmarkedPages.isBlank()) return emptySet()
+        return bookmarkedPages.split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+            .toSet()
+    }
 }

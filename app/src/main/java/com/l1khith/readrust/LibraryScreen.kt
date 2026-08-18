@@ -8,8 +8,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,19 +34,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GridView
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -66,6 +67,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -74,13 +76,61 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.l1khith.readrust.ui.theme.AccentColor
 import com.l1khith.readrust.ui.theme.AppBackground
+import com.l1khith.readrust.ui.theme.BorderColor
+import com.l1khith.readrust.ui.theme.SurfaceContainer
 import com.l1khith.readrust.ui.theme.SurfaceDark
 import com.l1khith.readrust.ui.theme.TextGrey
 import com.l1khith.readrust.ui.theme.TextWhite
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * AdMob Google Test Banner Composable
+ */
+@Composable
+fun AdMobBanner(
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceDark)
+            .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+            .padding(vertical = 10.dp, horizontal = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(AccentColor, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    "ADMOB TEST AD",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0A0A0A)
+                )
+            }
+            Text(
+                "Google Test Banner • ca-app-pub-3940256099942544/6300978111",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                color = TextWhite,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
 
 /**
  * Asynchronously loads and displays a PDF first-page thumbnail.
- * Shows a loading spinner while generating, falls back to a book icon on failure.
  */
 @Composable
 fun PdfThumbnail(
@@ -97,8 +147,9 @@ fun PdfThumbnail(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF2C2C2C)),
+            .clip(RoundedCornerShape(12.dp))
+            .background(SurfaceContainer)
+            .border(1.dp, BorderColor, RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center
     ) {
         AnimatedVisibility(
@@ -107,16 +158,18 @@ fun PdfThumbnail(
             exit = fadeOut()
         ) {
             thumbnail?.let { bmp ->
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = "PDF thumbnail",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                if (!bmp.isRecycled) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = "PDF thumbnail",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
             }
         }
 
-        if (thumbnail == null) {
+        if (thumbnail == null || thumbnail?.isRecycled == true) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.MenuBook,
                 contentDescription = "PDF",
@@ -134,15 +187,12 @@ fun LibraryScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // Live Flow updates from Room database
     val allBooks by BookStore.getAllBooksFlow(context).collectAsState(initial = emptyList())
     var searchQuery by rememberSaveable { mutableStateOf("") }
-
-    // VIEW MODE STATE: default is List view ("list by list"), toggleable to Grid
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var isGridView by rememberSaveable { mutableStateOf(false) }
-
-    // DELETE DIALOG STATE
     var bookToDelete by remember { mutableStateOf<BookData?>(null) }
 
     val filteredBooks = remember(allBooks, searchQuery) {
@@ -152,13 +202,13 @@ fun LibraryScreen(
 
     val recentBook = allBooks.firstOrNull()
 
-    // DELETE CONFIRMATION DIALOG
     if (bookToDelete != null) {
         AlertDialog(
             onDismissRequest = { bookToDelete = null },
-            title = { Text("Delete Book?", color = TextWhite) },
-            text = { Text("Are you sure you want to remove '${bookToDelete?.title}' from your library?", color = TextGrey) },
+            title = { Text("Delete Book?", color = TextWhite, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to remove '${bookToDelete?.title}' from your library?", color = TextGrey, fontFamily = FontFamily.Monospace, fontSize = 13.sp) },
             containerColor = SurfaceDark,
+            shape = RoundedCornerShape(32.dp),
             confirmButton = {
                 Button(
                     onClick = {
@@ -167,14 +217,15 @@ fun LibraryScreen(
                         }
                         bookToDelete = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF93000A)),
+                    shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text("Delete", color = Color.White)
+                    Text("Delete", color = Color(0xFFFFDAD6), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { bookToDelete = null }) {
-                    Text("Cancel", color = TextWhite)
+                    Text("Cancel", color = TextWhite, fontFamily = FontFamily.Monospace)
                 }
             }
         )
@@ -182,11 +233,13 @@ fun LibraryScreen(
 
     Scaffold(
         containerColor = AppBackground,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onAddBookClick,
                 containerColor = AccentColor,
-                contentColor = Color.White
+                contentColor = Color(0xFF0A0A0A),
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add PDF")
             }
@@ -196,64 +249,97 @@ fun LibraryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            // Top Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Library", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+            // ── Google AdMob Test Banner Ad Space ──
+            AdMobBanner()
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Top Bar with "Library" Title & Search Icon Action
+            if (isSearchActive) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = { ReadingModeManager.isReadingMode = !ReadingModeManager.isReadingMode }
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                            contentDescription = "Toggle Reading Mode",
-                            tint = if (ReadingModeManager.isReadingMode) AccentColor else TextGrey
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search docs...", color = TextGrey, fontFamily = FontFamily.Monospace, fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.Search, "Search", tint = AccentColor) },
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                searchQuery = ""
+                                isSearchActive = false
+                            }) {
+                                Icon(Icons.Default.Close, "Close", tint = TextGrey)
+                            }
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = SurfaceDark,
+                            unfocusedContainerColor = SurfaceDark,
+                            focusedTextColor = TextWhite,
+                            unfocusedTextColor = TextWhite,
+                            focusedIndicatorColor = AccentColor,
+                            unfocusedIndicatorColor = BorderColor
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "Library",
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite
+                        )
+                        Text(
+                            "DOCUMENT COLLECTION",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AccentColor,
+                            letterSpacing = 1.sp
                         )
                     }
-                    Box(modifier = Modifier.size(32.dp).background(Color.Gray, CircleShape))
+                    IconButton(onClick = { isSearchActive = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search Documents",
+                            tint = AccentColor
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Search Bar
-            TextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Search your library...", color = TextGrey) },
-                leadingIcon = { Icon(Icons.Default.Search, "Search", tint = TextGrey) },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = SurfaceDark,
-                    unfocusedContainerColor = SurfaceDark,
-                    focusedTextColor = TextWhite,
-                    unfocusedTextColor = TextWhite,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Continue Reading
-            if (recentBook != null && searchQuery.isBlank()) {
-                Text("Continue Reading", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Spacer(modifier = Modifier.height(10.dp))
+            // Continue Reading Section
+            if (recentBook != null && searchQuery.isBlank() && !isSearchActive) {
+                Text(
+                    "Continue Reading",
+                    color = TextWhite,
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 ContinueReadingCard(
                     book = recentBook,
                     onClick = { onBookClick(recentBook.uriString.toUri()) },
                     onLongClick = { bookToDelete = recentBook }
                 )
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
             // Section Header & View Toggle Button
@@ -262,7 +348,13 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("All Documents", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(
+                    "All Documents",
+                    color = TextWhite,
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
                 IconButton(onClick = { isGridView = !isGridView }) {
                     Icon(
                         imageVector = if (isGridView) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
@@ -271,14 +363,13 @@ fun LibraryScreen(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (filteredBooks.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No books found. Tap + to add one!", color = TextGrey)
+                    Text("No documents found. Tap + to open one!", color = TextGrey, fontFamily = FontFamily.Monospace)
                 }
             } else if (isGridView) {
-                // GRID VIEW LAYOUT
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -293,7 +384,6 @@ fun LibraryScreen(
                     }
                 }
             } else {
-                // LIST BY LIST LAYOUT (Row by Row)
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -310,15 +400,16 @@ fun LibraryScreen(
     }
 }
 
-// LIST ITEM COMPOSABLE (Row-by-row layout)
+// LIST ITEM COMPOSABLE
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BookListItem(book: BookData, onClick: () -> Unit, onLongClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(SurfaceDark)
+            .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -328,9 +419,9 @@ fun BookListItem(book: BookData, onClick: () -> Unit, onLongClick: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF2C2C2C)),
+                .size(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SurfaceContainer),
             contentAlignment = Alignment.Center
         ) {
             PdfThumbnail(
@@ -346,6 +437,7 @@ fun BookListItem(book: BookData, onClick: () -> Unit, onLongClick: () -> Unit) {
             Text(
                 text = book.title,
                 color = TextWhite,
+                fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp,
                 maxLines = 1,
@@ -361,16 +453,17 @@ fun BookListItem(book: BookData, onClick: () -> Unit, onLongClick: () -> Unit) {
                     progress = { book.getProgress() },
                     modifier = Modifier
                         .weight(1f)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp)),
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
                     color = AccentColor,
-                    trackColor = Color.DarkGray,
+                    trackColor = Color(0xFF2C2C2C),
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 val percent = (book.getProgress() * 100).toInt()
                 Text(
                     text = "$percent% • p.${book.currentPage + 1}/${book.totalPages}",
                     color = TextGrey,
+                    fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -395,7 +488,8 @@ fun BookGridItem(book: BookData, onClick: () -> Unit, onLongClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(200.dp)
-                .background(SurfaceDark, RoundedCornerShape(8.dp)),
+                .background(SurfaceDark, RoundedCornerShape(16.dp))
+                .border(1.dp, BorderColor, RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center
         ) {
             PdfThumbnail(
@@ -408,6 +502,7 @@ fun BookGridItem(book: BookData, onClick: () -> Unit, onLongClick: () -> Unit) {
         Text(
             text = book.title,
             color = TextWhite,
+            fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp,
             maxLines = 2,
@@ -415,9 +510,11 @@ fun BookGridItem(book: BookData, onClick: () -> Unit, onLongClick: () -> Unit) {
         )
         val progressPercent = (book.getProgress() * 100).toInt()
         Text(
-            text = "$progressPercent% Read",
+            text = "$progressPercent% READ",
             color = AccentColor,
-            fontSize = 12.sp
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold
         )
     }
 }
@@ -430,6 +527,7 @@ fun ContinueReadingCard(book: BookData, onClick: () -> Unit, onLongClick: () -> 
             .fillMaxWidth()
             .height(130.dp)
             .background(SurfaceDark, RoundedCornerShape(16.dp))
+            .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -441,8 +539,8 @@ fun ContinueReadingCard(book: BookData, onClick: () -> Unit, onLongClick: () -> 
             modifier = Modifier
                 .width(70.dp)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF2C2C2C)),
+                .clip(RoundedCornerShape(12.dp))
+                .background(SurfaceContainer),
             contentAlignment = Alignment.Center
         ) {
             PdfThumbnail(
@@ -459,6 +557,7 @@ fun ContinueReadingCard(book: BookData, onClick: () -> Unit, onLongClick: () -> 
             Text(
                 book.title,
                 color = TextWhite,
+                fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 maxLines = 2,
@@ -468,13 +567,19 @@ fun ContinueReadingCard(book: BookData, onClick: () -> Unit, onLongClick: () -> 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LinearProgressIndicator(
                     progress = { book.getProgress() },
-                    modifier = Modifier.width(100.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    modifier = Modifier.width(100.dp).height(6.dp).clip(RoundedCornerShape(3.dp)),
                     color = AccentColor,
-                    trackColor = Color.DarkGray,
+                    trackColor = Color(0xFF2C2C2C),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 val percent = (book.getProgress() * 100).toInt()
-                Text("$percent%", color = AccentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "$percent%",
+                    color = AccentColor,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

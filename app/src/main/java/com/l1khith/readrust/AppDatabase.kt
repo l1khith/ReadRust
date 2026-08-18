@@ -4,15 +4,29 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.l1khith.readrust.data.BookmarkDao
+import com.l1khith.readrust.data.BookmarkEntity
+import com.l1khith.readrust.data.HighlightDao
+import com.l1khith.readrust.data.HighlightEntity
 
 /**
  * AppDatabase: The single, application-wide Room database instance.
- * Accessed via the companion object [getInstance] which provides a thread-safe singleton.
+ * Registered with BookEntity, HighlightEntity, and BookmarkEntity.
  */
-@Database(entities = [BookEntity::class], version = 2, exportSchema = true)
+@Database(
+    entities = [
+        BookEntity::class,
+        HighlightEntity::class,
+        BookmarkEntity::class
+    ],
+    version = 4,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun bookDao(): BookDao
+    abstract fun highlightDao(): HighlightDao
+    abstract fun bookmarkDao(): BookmarkDao
 
     companion object {
         @Volatile

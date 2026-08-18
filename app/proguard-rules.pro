@@ -1,23 +1,14 @@
-# R8 / ProGuard rules for ReadRust production release
+# Room rules
+-keep class com.l1khith.readrust.BookEntity { *; }
+-keep class com.l1khith.readrust.BookDao { *; }
+-keep class com.l1khith.readrust.AppDatabase { *; }
 
-# Keep JNI native methods
--keepclasseswithmembernames class * {
+# JNI & Native Bridge rules
+-keep class com.l1khith.readrust.PdfiumBridge { *; }
+-keepclassmembers class com.l1khith.readrust.PdfiumBridge {
     native <methods>;
 }
 
-# Keep PdfiumBridge and model classes accessed via JNI / Reflection / Gson
--keep class com.l1khith.readrust.PdfiumBridge { *; }
--keep class com.l1khith.readrust.PdfHelper { *; }
+# Gson models
 -keep class com.l1khith.readrust.SentenceWithBounds { *; }
--keepclassmembers class com.l1khith.readrust.SentenceWithBounds { *; }
-
-# Keep Gson annotations and serialized attributes
--keepattributes Signature, *Annotation*, EnclosingMethod, InnerClasses
--keepclassmembers class * {
-    @com.google.gson.annotations.SerializedName <fields>;
-}
-
-# Keep Compose annotations
--keepclassmembers class * {
-    @androidx.compose.runtime.Composable <methods>;
-}
+-keep class com.l1khith.readrust.PageRender { *; }

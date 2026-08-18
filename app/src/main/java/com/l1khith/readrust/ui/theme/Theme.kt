@@ -4,13 +4,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.Color
+import com.l1khith.readrust.AppTheme
 import com.l1khith.readrust.ReadingModeManager
-
-private val AppColorScheme = darkColorScheme()
+import com.l1khith.readrust.ThemeManager
 
 @Composable
 fun ReadRustTheme(content: @Composable () -> Unit) {
@@ -19,9 +19,30 @@ fun ReadRustTheme(content: @Composable () -> Unit) {
 
 @Composable
 fun ReaderTheme(content: @Composable () -> Unit) {
+    val current = ThemeManager.currentTheme
+    val colorScheme = if (current == AppTheme.LIGHT || current == AppTheme.SEPIA) {
+        lightColorScheme(
+            primary = current.accent,
+            background = current.background,
+            surface = current.surface,
+            onBackground = current.textPrimary,
+            onSurface = current.textPrimary,
+            outline = current.border
+        )
+    } else {
+        darkColorScheme(
+            primary = current.accent,
+            background = current.background,
+            surface = current.surface,
+            onBackground = current.textPrimary,
+            onSurface = current.textPrimary,
+            outline = current.border
+        )
+    }
+
     MaterialTheme(
-        colorScheme = AppColorScheme,
-        typography = Typography,
+        colorScheme = colorScheme,
+        typography = Typography
     ) {
         Box(
             modifier = Modifier
@@ -29,7 +50,7 @@ fun ReaderTheme(content: @Composable () -> Unit) {
                 .drawWithContent {
                     drawContent()
                     if (ReadingModeManager.isReadingMode) {
-                        drawRect(color = Color(0xFFE5A93B).copy(alpha = 0.15f))
+                        drawRect(color = current.accent.copy(alpha = 0.12f))
                     }
                 }
         ) {

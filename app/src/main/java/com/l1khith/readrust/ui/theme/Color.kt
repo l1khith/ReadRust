@@ -1,10 +1,14 @@
 package com.l1khith.readrust.ui.theme
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.l1khith.readrust.ThemeManager
 
-// App color palette
-val AppBackground = Color(0xFF000000) // Pure black background
-val SurfaceDark    = Color(0xFF121212) // Dark charcoal for surfaces/cards
-val AccentColor    = Color(0xFF2196F3) // Premium blue action/highlight color
-val TextWhite      = Color(0xFFE5E5E5) // Soft reading off-white (reduces eye strain)
-val TextGrey       = Color(0xFF9E9E9E) // Neutral muted gray
+// Dynamic color properties linked directly to active ThemeManager theme
+val AppBackground: Color @Composable get() = ThemeManager.AppBackground
+val SurfaceDark: Color @Composable get() = ThemeManager.SurfaceDark
+val SurfaceContainer: Color @Composable get() = ThemeManager.SurfaceDark
+val AccentColor: Color @Composable get() = ThemeManager.AccentColor
+val TextWhite: Color @Composable get() = ThemeManager.TextWhite
+val TextGrey: Color @Composable get() = ThemeManager.TextGrey
+val BorderColor: Color @Composable get() = ThemeManager.BorderColor

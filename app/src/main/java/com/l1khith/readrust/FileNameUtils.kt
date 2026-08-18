@@ -9,12 +9,16 @@ object FileNameUtils {
     fun getFileName(context: Context, uri: Uri): String {
         var result: String? = null
         if (uri.scheme == "content") {
-            val cursor = context.contentResolver.query(uri, null, null, null, null)
             try {
-                if (cursor != null && cursor.moveToFirst()) {
-                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (index >= 0) {
-                        result = cursor.getString(index)
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (index >= 0) {
+                            val name = cursor.getString(index)
+                            if (!name.isNullOrBlank()) {
+                                result = name
+                            }
+                        }
                     }
                 }
             } catch (e: SecurityException) {
@@ -23,17 +27,17 @@ object FileNameUtils {
                 Log.e("FileNameUtils", "Invalid URI: ${e.message}")
             } catch (e: Exception) {
                 Log.e("FileNameUtils", "Error resolving file name: ${e.message}")
-            } finally {
-                cursor?.close()
             }
         }
-        if (result == null) {
-            result = uri.path
-            val cut = result?.lastIndexOf('/')
-            if (cut != null && cut != -1) {
-                result = result?.substring(cut + 1)
+        
+        if (result.isNullOrBlank()) {
+            val path = uri.path
+            if (!path.isNullOrBlank()) {
+                val cut = path.lastIndexOf('/')
+                result = if (cut != -1) path.substring(cut + 1) else path
             }
         }
-        return result ?: "Unknown Document.pdf"
+        
+        return if (!result.isNullOrBlank()) result!! else "Unknown Document.pdf"
     }
 }

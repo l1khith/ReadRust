@@ -11,6 +11,8 @@ import android.view.WindowManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+import com.google.gson.annotations.SerializedName
+
 sealed class PdfResult<out T> {
     data class Success<T>(val value: T) : PdfResult<T>()
     data class Error(val message: String) : PdfResult<Nothing>()
@@ -23,11 +25,11 @@ data class PageRender(
 )
 
 data class SentenceWithBounds(
-    val text: String,
-    val left: Float,
-    val top: Float,
-    val right: Float,
-    val bottom: Float
+    @SerializedName("text") val text: String = "",
+    @SerializedName("left") val left: Float = 0f,
+    @SerializedName("top") val top: Float = 0f,
+    @SerializedName("right") val right: Float = 0f,
+    @SerializedName("bottom") val bottom: Float = 0f
 )
 
 object PdfHelper {
@@ -41,6 +43,8 @@ object PdfHelper {
 
     // 3-bucket reusable Bitmaps for zero-allocation page rendering
     private val buckets = Array<Bitmap?>(3) { null }
+
+    fun getDocHandle(): Long = docHandle
 
     private fun getOrCreateBucket(index: Int): Bitmap {
         val slot = Math.floorMod(index, 3)
@@ -99,7 +103,7 @@ object PdfHelper {
 
     suspend fun getPageCount(): Int = getPageCountInternal()
 
-    suspend fun renderPageToBitmap(pageIndex: Int): PdfResult<PageRender> {
+    suspend fun renderPageToBitmap(pageIndex: Int, activeSentence: SentenceWithBounds? = null): PdfResult<PageRender> {
         val handle = docHandle
         if (handle <= 0L) return PdfResult.NotReady
 
@@ -107,7 +111,15 @@ object PdfHelper {
             try {
                 val bitmap = getOrCreateBucket(pageIndex)
 
-                val res = PdfiumBridge.nativeRenderPage(handle, pageIndex, bitmap, targetWidth, targetHeight)
+                val hlLeft = activeSentence?.left ?: -1f
+                val hlTop = activeSentence?.top ?: -1f
+                val hlRight = activeSentence?.right ?: -1f
+                val hlBottom = activeSentence?.bottom ?: -1f
+
+                val res = PdfiumBridge.nativeRenderPage(
+                    handle, pageIndex, bitmap, targetWidth, targetHeight,
+                    hlLeft, hlTop, hlRight, hlBottom
+                )
                 if (res != 0) {
                     return@withContext PdfResult.Error("Native render failed with error code $res")
                 }
@@ -155,8 +167,8 @@ object PdfHelper {
         return withContext(Dispatchers.IO) {
             try {
                 val json = PdfiumBridge.nativeExtractSentencesJson(handle, pageIndex) ?: "[]"
-                val type = object : com.google.gson.reflect.TypeToken<List<SentenceWithBounds>>() {}.type
-                val items: List<SentenceWithBounds> = com.google.gson.Gson().fromJson(json, type) ?: emptyList()
+                val array = com.google.gson.Gson().fromJson(json, Array<SentenceWithBounds>::class.java) ?: emptyArray()
+                val items = array.toList()
                 val filtered = items.filter { it.text.isNotBlank() && it.text.length > 3 && !isNoiseOrPageNumber(it.text) }
                 PdfResult.Success(filtered)
             } catch (e: Exception) {
